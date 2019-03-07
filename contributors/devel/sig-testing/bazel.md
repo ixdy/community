@@ -48,6 +48,37 @@ $ ../test-infra/planter/planter.sh make bazel-test
 $ ../test-infra/planter/planter.sh bazel build //cmd/kubectl
 ```
 
+## Cross-compilation
+Cross-compilation across OSes and architectures is now supported, though it
+hasn't been extensively tested, so some issues may remain.
+
+To enable cross-compilation, use one of the config settings defined in the root
+`.bazelrc` in kubernetes/kubernetes; for example, to cross-compile `kubectl` to
+linux/arm, you can run
+```
+bazel build --config=cross:linux_arm //cmd/kubectl
+```
+
+Note that some targets use CGO, and require a crossbuild toolchain (including
+a C compiler, linker, and target libraries). In debian-like systems, these
+are usually installable through package groups like `crossbuild-essential-armhf`.
+
+If you don't want to install the crossbuild toolchain, you can use the
+crossbuild version of planter by setting `CROSS=y` in your environment.
+
+Known issues:
+* The Bazel `CROSSTOOL` is currently configured primarily
+  for the debian-like crossbuild toolchains described above. Potential future
+  work includes better autodetection of the crossbuild toolchains, or even
+  automatically downloading necessary crossbuild toolchain dependencies.
+* The "convenience" make targets for Bazel have not yet been updated to
+  support cross-compilation.
+* Currently only one platform is configurable in a single Bazel run, so building
+  the full suite of platforms requires multiple Bazel calls. Artifacts must
+  additionally be copied out of the Bazel output tree after each call.
+* Because only one platform is configurable at a time, building multi-arch
+  manifest lists of container images is not supported.
+
 ## Continuous Integration
 
 There are several bazel CI jobs:
@@ -85,25 +116,13 @@ Updating the `BUILD` file for a package will be required when:
 
 ## Known issues and limitations
 
-### [Cross-compilation of cgo is not currently natively supported](https://github.com/bazelbuild/rules_go/issues/1020)
-All binaries are currently built for the host OS and architecture running Bazel.
-(For example, you can't currently target linux/amd64 from macOS or linux/s390x
-from an amd64 machine.)
-
-The Go rules support cross-compilation of pure Go code using the `--platforms`
-flag, and this is being used successfully in the kubernetes/test-infra repo.
-
-It may already be possible to cross-compile cgo code if a custom CC toolchain is
-set up, possibly reusing the kube-cross Docker image, but this area needs
-further exploration.
-
 ### The CC toolchain is not fully hermetic
 Bazel requires several tools and development packages to be installed in the system, including `gcc`, `g++`, `glibc and libstdc++ development headers` and `glibc static development libraries`. Please check your distribution for exact names of the packages. Examples for some commonly used distributions are below:
 
-|     Dependency        | Debian/Ubuntu                 | CentOS                         | OpenSuSE                                |
-|:---------------------:|-------------------------------|--------------------------------|-----------------------------------------|
-| Build essentials      | `apt install build-essential` | `yum groupinstall development` | `zypper install -t pattern devel_C_C++` |
-| GCC C++               | `apt install g++`             | `yum install gcc-c++`          | `zypper install gcc-c++`                |
+|      Dependency       | Debian/Ubuntu                 | CentOS                         | OpenSuSE                                |
+| :-------------------: | ----------------------------- | ------------------------------ | --------------------------------------- |
+|   Build essentials    | `apt install build-essential` | `yum groupinstall development` | `zypper install -t pattern devel_C_C++` |
+|        GCC C++        | `apt install g++`             | `yum install gcc-c++`          | `zypper install gcc-c++`                |
 | GNU Libc static files | `apt install libc6-dev`       | `yum install glibc-static`     | `zypper install glibc-devel-static`     |
 
 If any of these packages change, they may also cause spurious build failures
